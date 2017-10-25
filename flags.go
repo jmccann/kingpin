@@ -146,6 +146,7 @@ type FlagClause struct {
 	actionMixin
 	completionsMixin
 	envarMixin
+	fileMixin
 	name          string
 	shorthand     rune
 	help          string
@@ -163,6 +164,20 @@ func newFlag(name, help string) *FlagClause {
 }
 
 func (f *FlagClause) setDefault() error {
+	if f.HasFileValue() {
+		if v, ok := f.value.(repeatableFlag); !ok || !v.IsCumulative() {
+			// Use the value as-is
+			return f.value.Set(f.GetFileValue())
+		} else {
+			for _, value := range f.GetSplitFileValue() {
+				if err := f.value.Set(value); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}
+
 	if f.HasEnvarValue() {
 		if v, ok := f.value.(repeatableFlag); !ok || !v.IsCumulative() {
 			// Use the value as-is
@@ -191,7 +206,7 @@ func (f *FlagClause) setDefault() error {
 
 func (f *FlagClause) needsValue() bool {
 	haveDefault := len(f.defaultValues) > 0
-	return f.required && !(haveDefault || f.HasEnvarValue())
+	return f.required && !(haveDefault || f.HasEnvarValue() || f.HasFileValue())
 }
 
 func (f *FlagClause) init() error {
@@ -271,6 +286,13 @@ func (f *FlagClause) Envar(name string) *FlagClause {
 func (f *FlagClause) NoEnvar() *FlagClause {
 	f.envar = ""
 	f.noEnvar = true
+	return f
+}
+
+// File overrides the default value(s) for a flag from a file, if it is set.
+// Several default values can be provided by using new lines to separate them.
+func (f *FlagClause) File(name string) *FlagClause {
+	f.file = name
 	return f
 }
 
